@@ -1,20 +1,69 @@
 import tensorflow as tf
 import tensornets as nets
 
+def get_vgg16_pooling_layer(layer_num):
+    name = "vgg16/conv{}/pool/MaxPool:0".format(layer_num)
+    output = tf.get_default_graph().get_tensor_by_name(name)
+    return output
+
 def fcn_32(sess, inputs, nb_classes):    
     vgg16_pretrained = nets.VGG16(inputs, is_training=True, stem=True)
     sess.run(vgg16_pretrained.pretrained())
     print(vgg16_pretrained)
-    x = tf.layers.conv2d(vgg16_pretrained, filters=4096, kernel_size=(7,7), padding='same', activation='relu', name='fc6')
-    print(x)
-    x = tf.layers.dropout(x)
-    print(x)
-    x = tf.layers.conv2d(x, filters=4096, kernel_size=(1,1), padding='same', activation='relu', name='fc7')
-    print(x)
-    x = tf.layers.dropout(x)
-    print(x)
-    x = tf.layers.conv2d(x, filters=nb_classes, kernel_size=(1,1), padding='same', activation='relu', name='score1')
-    print(x)
-    x = tf.layers.conv2d_transpose(x, filters=nb_classes, kernel_size=(32,32), strides=(32,32), padding='valid', activation=None, name='score2')
-    print(x)
-    return x, vgg16_pretrained
+    
+    conv6 = tf.layers.conv2d(vgg16_pretrained, 4096, (7,7), padding='same', activation='relu', name='conv6')
+    print(conv6)
+    drop6 = tf.layers.dropout(conv6)
+    print(drop6)
+    
+    conv7 = tf.layers.conv2d(drop6, 4096, (1,1), padding='same', activation='relu', name='conv7')
+    print(conv7)
+    drop7 = tf.layers.dropout(conv7)
+    print(drop7)
+    
+    conv7_score = tf.layers.conv2d(drop7, nb_classes, (1,1), padding='same', activation='relu', name='conv7_score')
+    print(conv7_score)
+    
+    final_score = tf.layers.conv2d_transpose(conv7_score, nb_classes, (32,32), strides=(32,32), padding='valid', activation=None, name='final_score')
+    print(final_score)
+    return final_score
+
+def fcn_16(sess, inputs, nb_classes):    
+    vgg16_pretrained = nets.VGG16(inputs, is_training=True, stem=True)
+    sess.run(vgg16_pretrained.pretrained())
+    print(vgg16_pretrained)
+    
+    conv6 = tf.layers.conv2d(vgg16_pretrained, 4096, (7,7), padding='same', activation='relu', name='conv6')
+    print(conv6)
+    drop6 = tf.layers.dropout(conv6)
+    print(drop6)
+    
+    conv7 = tf.layers.conv2d(drop6, 4096, (1,1), padding='same', activation='relu', name='conv7')
+    print(conv7)
+    drop7 = tf.layers.dropout(conv7)
+    print(drop7)
+
+    # Get class scores from conv7
+    conv7_score = tf.layers.conv2d(drop7, nb_classes, (1,1), padding='same', activation='relu', name='conv7_score')
+    print(conv7_score)
+
+    # Upsample conv7    
+    conv7_score_x2 = tf.layers.conv2d_transpose(conv7_score, nb_classes, (2,2), strides=(2,2), padding='valid', activation=None, name='conv7_score_x2')
+    print(conv7_score_x2)
+
+    # Get pool4 and class scores
+    pool4 = get_vgg16_pooling_layer(4)
+    print(pool4)
+    pool4_score = tf.layers.conv2d(pool4, nb_classes, (1,1), padding='same', activation='relu', name='pool4_score')
+    print(pool4_score)
+
+    # Compute sum
+    pool4_conv7_score = tf.math.add(pool4_score, conv7_score_x2)
+
+    # Upsample sum
+    final_score = tf.layers.conv2d_transpose(pool4_conv7_score, nb_classes, (16,16), strides=(16,16), padding='valid', activation=None, name='final_score')
+    print(final_score)
+    return final_score
+
+
+

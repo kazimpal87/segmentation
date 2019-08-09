@@ -15,11 +15,11 @@ dataset, nb_images = data_iterator.get_pascal_dataset(
 iter = dataset.make_one_shot_iterator()
 X, labels = iter.get_next()
 
-model = models.fcn_32(sess, X, 21)
-print(model)
+prediction = models.fcn_16(sess, X, 21)
+print(prediction)
 input()
 
-loss = tf.losses.softmax_cross_entropy(labels, model)
+loss = tf.losses.softmax_cross_entropy(labels, prediction)
 
 optimizer = tf.train.MomentumOptimizer(learning_rate=0.001, momentum=0.9).minimize(loss)
 
@@ -31,7 +31,7 @@ with sess.as_default():
     for epoch in range(1, epochs + 1):
         for i in range(1, nb_images + 1):
             l, _ = sess.run([loss, optimizer])
-            if i % 1 == 0:
+            if i % 10 == 0:
                 print('Epoch {}, Batch {}, Loss {:.3f}'.format(epoch, i, l), end='')
                     
     saver = tf.train.Saver()

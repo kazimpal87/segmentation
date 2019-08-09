@@ -6,16 +6,24 @@ sess = tf.Session()
 nb_classes = 21
 epochs = 100
 save_model_path = 'test'
+fcn_version = 8
+
+version_to_model = {
+    8: models.fcn_8,
+    16: models.fcn_16,
+    32: models.fcn_32
+}
 
 dataset, nb_images = data_iterator.get_pascal_dataset(
     '/Users/kazimpal/workspace/segmentation/VOC2012/ImageSets/Segmentation/train.txt', 
     '/Users/kazimpal/workspace/segmentation/VOC2012/JPEGImages/', 
     '/Users/kazimpal/workspace/segmentation/VOC2012/SegmentationClass/', 
-    32, 21)
+    fcn_version, 21)
+
 iter = dataset.make_one_shot_iterator()
 X, labels = iter.get_next()
 
-prediction = models.fcn_16(sess, X, 21)
+prediction = version_to_model[fcn_version](sess, X, 21)
 print(prediction)
 input()
 
@@ -32,7 +40,7 @@ with sess.as_default():
         for i in range(1, nb_images + 1):
             l, _ = sess.run([loss, optimizer])
             if i % 10 == 0:
-                print('Epoch {}, Batch {}, Loss {:.3f}'.format(epoch, i, l), end='')
+                print('Epoch {}, Batch {}, Loss {:.3f}'.format(epoch, i, l))
                     
     saver = tf.train.Saver()
     save_path = saver.save(sess, save_model_path)

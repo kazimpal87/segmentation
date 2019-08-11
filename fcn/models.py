@@ -1,31 +1,53 @@
 import tensorflow as tf
 import tensornets as nets
+import numpy as np
 
 def get_vgg16_pooling_layer(layer_num):
     name = "vgg16/conv{}/pool/MaxPool:0".format(layer_num)
     output = tf.get_default_graph().get_tensor_by_name(name)
     return output
 
-def conv2d_helper(inputs, filters, kernel_size, name, do_dropout=True):
-    x = tf.layers.conv2d(inputs, filters, kernel_size, padding='same', activation='relu', name=name)
+def conv2d_helper(inputs, filters, kernel_size, name, do_dropout=True, activation='relu'):
+    x = tf.keras.layers.Conv2D(filters, kernel_size, padding='same', activation=activation, name='seg/'+name)(inputs)
     if do_dropout:
-        x = tf.layers.dropout(x)
+        x = tf.layers.dropout(x, name='seg/'+name+'_dropout')
     return x
 
-def upsample_helper(inputs, filters, scale, name):
-    x = tf.layers.conv2d_transpose(inputs, filters, (scale,scale), strides=(scale,scale), padding='valid', activation=None, name=name)
-    return x
+def bilinear_upsample_weights(factor, number_of_classes):
+    filter_size = factor*2 - factor%2
+    factor = (filter_size + 1) // 2
+    if filter_size % 2 == 1:
+        center = factor - 1
+    else:
+        center = factor - 0.5
+    og = np.ogrid[:filter_size, :filter_size]
+    upsample_kernel = (1 - abs(og[0] - center) / factor) * (1 - abs(og[1] - center) / factor)
+    weights = np.zeros((filter_size, filter_size, number_of_classes, number_of_classes),
+                       dtype=np.float32)
+    for i in range(number_of_classes):
+        weights[:, :, i, i] = upsample_kernel
+    return weights
 
-def fcn_32(sess, inputs, nb_classes):    
-    vgg16_pretrained = nets.VGG16(inputs, is_training=True, stem=True)
-    sess.run(vgg16_pretrained.pretrained())
+def fcn_32(inputs, nb_classes):    
+    vgg16_pretrained = tf.keras.applications.VGG16(include_top=False, input_tensor=inputs, weights='imagenet')
+    pool5 = vgg16_pretrained.output
 
     # Replace fc layers with conv layers
-    conv6 = conv2d_helper(vgg16_pretrained, 4096, (7,7), name='conv6')
-    conv7 = conv2d_helper(conv6, 4096, (1,1), name='conv7')
-    conv7_score = conv2d_helper(conv7, nb_classes, (1,1), name='conv7_score', do_dropout=False)
-
-    final_score = upsample_helper(conv7_score, nb_classes, 32, name='final_score')
+    #conv6 = conv2d_helper(pool5, 4096, (7,7), name='conv6')
+    #conv7 = conv2d_helper(conv6, 4096, (1,1), name='conv7')
+    conv7_score = tf.keras.layers.Conv2D(nb_classes, (1, 1), padding='same', activation='linear', name='seg/conv7_score')(pool5)
+    final_score = tf.keras.layers.Conv2DTranspose(
+        filters=nb_classes, 
+        kernel_size=(64, 64),
+        strides=(32, 32),
+        padding='same',
+        activation=None,
+        name='seg/final_score',
+        kernel_initializer=tf.keras.initializers.Constant(bilinear_upsample_weights(32, nb_classes)))(conv7_score)
+    
+    print(final_score)
+    input()
+    
     return final_score
 
 def fcn_16(sess, inputs, nb_classes):    
@@ -33,16 +55,16 @@ def fcn_16(sess, inputs, nb_classes):
     sess.run(vgg16_pretrained.pretrained())
     
     # Replace fc layers with conv layers
-    conv6 = conv2d_helper(vgg16_pretrained, 4096, (7,7), name='conv6')
-    conv7 = conv2d_helper(conv6, 4096, (1,1), name='conv7')
-    conv7_score = conv2d_helper(conv7, nb_classes, (1,1), name='conv7_score', do_dropout=False)
+    conv6 = conv2d_helper(vgg16_pretrained, 4096, (7, 7), name='conv6')
+    conv7 = conv2d_helper(conv6, 4096, (1, 1), name='conv7')
+    conv7_score = conv2d_helper(conv7, nb_classes, (1, 1), name='conv7_score', do_dropout=False)
 
     # Upsample conv7    
     conv7_score_x2 = upsample_helper(conv7_score, nb_classes, 2, name='conv7_score_x2')
 
     # Get pool4 and class scores
     pool4 = get_vgg16_pooling_layer(4)
-    pool4_score = conv2d_helper(pool4, nb_classes, (1,1), name='pool4_score')
+    pool4_score = conv2d_helper(pool4, nb_classes, (1, 1), name='pool4_score')
 
     # Compute sum
     pool4_conv7_score = tf.math.add(pool4_score, conv7_score_x2)

@@ -2,6 +2,9 @@ import os
 import numpy as np
 from PIL import Image
 import tensorflow as tf
+from tensorflow.keras.applications.vgg16 import preprocess_input
+import imageio
+from random import shuffle
 
 class PascalDataset(object):
 
@@ -14,71 +17,60 @@ class PascalDataset(object):
         self.nb_classes = nb_classes
 
         self.make_dataset_and_iterator()
-        self.make_file_lists()
 
     def resize_image_to_multiple(self, image):
         image_shape = tf.shape(image)
         h = image_shape[0]
         w = image_shape[1]
         h = (h // self.size_mult) * self.size_mult
-        w = (w // self.size_mult) * self.size_mult    
-        image = tf.image.resize_images(image, [h, w])
+        w = (w // self.size_mult) * self.size_mult
+        image = tf.image.resize_images(image, [h, w], method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
         return image
 
     def load_input_image(self, path):
-        image = tf.read_file(path)
-        image = tf.image.decode_jpeg(image, channels=3)
-        image = tf.image.convert_image_dtype(image, tf.float32)
-        image = self.resize_image_to_multiple(image)
-        return image
+        img = Image.open(path)
+        w, h = img.size
+        img = img.resize(((w//32)*32, (h//32)*32))
+        img = np.array(img, dtype=np.float32) / 255
+        img = np.expand_dims(img, axis=0)
+        #img = preprocess_input(img)
+        return img
 
-    def load_target_image(self, path):
-
-        def load_palette_image(path):
-            img = Image.open(path)
-            img = np.array(img, dtype=np.uint8)
-            img[img==255] = 0
-            return img
-
-        image = tf.py_func(load_palette_image, [path], tf.uint8)
-        image = tf.one_hot(image, self.nb_classes, dtype=tf.uint8)
-        image.set_shape([None, None, self.nb_classes])
-        image = self.resize_image_to_multiple(image)
-        return image
-
-    def get_loading_function(self):
-        
-        def load_image_pair(input_path, target_path):
-            input_image = self.load_input_image(input_path)
-            target_image = self.load_target_image(target_path) 
-            return input_image, target_image
-        return load_image_pair
+    def load_label_image(self, path):
+        img = Image.open(path)
+        w, h = img.size
+        img = img.resize(((w//32)*32, (h//32)*32))
+        img = np.array(img, dtype=np.uint8)
+        img[img==255] = 0
+        y = np.zeros((1, img.shape[0], img.shape[1], self.nb_classes), dtype=np.float32)
+        for i in range(img.shape[0]):
+            for j in range(img.shape[1]):
+                y[0, i, j, img[i][j]] = 1
+        return y
 
     def make_dataset_and_iterator(self):
-        parse_function = self.get_loading_function()
-        self.img_ph = tf.placeholder(tf.string, [None,])
-        self.seg_ph = tf.placeholder(tf.string, [None,])
-        
-        self.dataset = tf.data.Dataset.from_tensor_slices((self.img_ph, self.seg_ph))
-        self.dataset = self.dataset.map(parse_function)
-        self.dataset = self.dataset.batch(1)
-        self.dataset = self.dataset.prefetch(10)
+        with open(self.file_list_train) as f:
+            self.train_files = f.read().splitlines()
+        with open(self.file_list_val) as f:
+            self.val_files = f.read().splitlines()
 
-        self.iterator = self.dataset.make_initializable_iterator()
+        self.train_gen = self.batch_generator(self.train_files)
+        self.val_gen = self.batch_generator(self.val_files)
 
-    def make_file_lists(self):
-
-        def make_one_list(file_list):
-            with open(file_list) as f:
-                files = f.read().splitlines()
-            img_files = [os.path.join(self.image_dir, im+'.jpg') for im in files]
-            seg_files = [os.path.join(self.seg_dir, im+'.png') for im in files]
-            return img_files, seg_files
-
-        self.img_files_train, self.seg_files_train = make_one_list(self.file_list_train)
-        self.img_files_val,  self.seg_files_val = make_one_list(self.file_list_val)
-        
-        self.nb_images_train = len(self.img_files_train)
-        self.nb_images_val = len(self.img_files_val)
-
+        self.nb_images_train = len(self.train_files)
+        self.nb_images_val = len(self.val_files)
     
+    def batch_generator(self, data, do_shuffle=False):
+        if do_shuffle: shuffle(data)
+
+        count = 0
+        while True:
+            if count >= len(data):
+                count = 0
+                if do_shuffle: shuffle(data)
+
+            f_i = data[count]
+            src_img = self.load_input_image(os.path.join(self.image_dir, f_i+'.jpg'))
+            lab_img = self.load_label_image(os.path.join(self.seg_dir, f_i+'.png'))
+            count += 1
+            yield src_img, lab_img

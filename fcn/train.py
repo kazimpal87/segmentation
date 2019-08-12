@@ -2,9 +2,9 @@ import numpy as np
 import tensorflow as tf
 from segmentation import data_iterator
 from segmentation.fcn import models
-import matplotlib.pyplot as plt
 import imageio
 from tensorflow.keras import backend as K
+import matplotlib.pyplot as plt
 
 nb_classes = 21
 epochs = 100
@@ -57,35 +57,25 @@ pascal_dataset = data_iterator.PascalDataset(
     '/Users/kazimpal/workspace/segmentation/VOC2012/ImageSets/Segmentation/train.txt',
     '/Users/kazimpal/workspace/segmentation/VOC2012/ImageSets/Segmentation/minitest.txt')
 
-'''
-for k in range(5):
-    X, y = next(pascal_dataset.train_gen)
-    print(X.shape, y.shape)
-    print(np.amin(X), np.amin(y))
-    print(np.amax(X), np.amax(y))
-    print(X.dtype, y.dtype)
-    plt.imshow(X[0,:,:,:])
-    plt.show()
-    for c in range(21):
-        plt.imshow(y[0,:,:,c])
+for e in range(5):
+    for k in range(1, pascal_dataset.nb_images_val + 1):
+        X, y = next(pascal_dataset.val_gen)
+        print(X.shape, y.shape)
+        plt.imshow(X[0,:,:,:].astype(np.uint8))
         plt.show()
-'''
+
 X = tf.placeholder(tf.float32, [None, None, None, 3])
 y = tf.placeholder(tf.float32, [None, None, None, nb_classes])
 y_pred, vgg_out, conv7_score = models.fcn_32(X, nb_classes)
 
 y_flat = tf.keras.layers.Reshape((-1, nb_classes))(y)
 y_pred_flat = tf.keras.layers.Reshape((-1, nb_classes))(y_pred)
-epsilon = tf.constant(value=1e-4)
-y_pred_flat = tf.keras.layers.Softmax()(y_pred_flat) + epsilon
 
-loss = tf.keras.losses.categorical_crossentropy(y_flat, y_pred_flat)
-#cross_entropy = -tf.reduce_sum(y_flat * tf.log(y_pred_flat), reduction_indices=[1])
-loss = tf.reduce_mean(loss)
+loss = tf.losses.softmax_cross_entropy(onehot_labels=y_flat, logits=y_pred_flat)
 
 train_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "seg")
 print(train_vars)
-optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.01).minimize(loss, var_list=train_vars)
+optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.0001).minimize(loss, var_list=train_vars)
 
 with K.get_session() as sess:
     print('running global_variables_initializer')
@@ -97,12 +87,35 @@ with K.get_session() as sess:
         
         for i in range(1, pascal_dataset.nb_images_train + 1):
             Xi, yi = next(pascal_dataset.train_gen)
-            _, l, yf, ypf = sess.run([optimizer, loss, y_flat, y_pred_flat], feed_dict={X:Xi, y:yi})
-            #for c in range(10):
-            #    print(c7s[0,:,:,c])
-            #    input()
-            print(l.shape)
+            _, l, yp, yt, yf = sess.run([optimizer, loss, y_pred, y, y_flat], feed_dict={X:Xi, y:yi})
+
+            foo = np.argmax(yp, axis=-1)
+            foo = np.squeeze(foo)
+
+            bar = np.argmax(yt, axis=-1)
+            bar = np.squeeze(bar)
+
+            mun = np.argmax(yf, axis=-1)
+            print(np.amax(mun))
+
+            plt.subplot(121)
+            plt.imshow(foo)
+            plt.subplot(122)
+            plt.imshow(bar)
+            plt.show()
+            #for c in range(21):
+            #    foo = yp[0,:,:,c]
+            #    plt.imshow(foo)
+            #    plt.show()
             
+            #l2 = np.squeeze(l)
+            #plt.imshow(l2)
+            #plt.show()
+           
+            yp = np.argmax(yp, axis=-1)
+            yp_min = np.amin(yp)
+            yp_max = np.amax(yp)
+
             '''print(yf.shape, ypf.shape)
             print(np.amin(yf), np.amax(yf))
             print(np.amin(ypf), np.amax(ypf))
@@ -122,7 +135,7 @@ with K.get_session() as sess:
                     break'''
             
             l = np.mean(l)
-            print('Epoch {}, Batch {} of {}, Loss {:.3f}'.format(epoch, i, pascal_dataset.nb_images_train, l))
+            print('Epoch {}, Batch {} of {}, Loss {:.3f}, yp_range {} {}'.format(epoch, i, pascal_dataset.nb_images_train, l, yp_min, yp_max))
         
         val_loss = 0
         for i in range(1, pascal_dataset.nb_images_val + 1):

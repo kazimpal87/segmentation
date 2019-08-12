@@ -1,5 +1,4 @@
 import tensorflow as tf
-import tensornets as nets
 import numpy as np
 
 def get_vgg16_pooling_layer(layer_num):
@@ -41,17 +40,19 @@ def fcn_32(inputs, nb_classes):
     
     conv7_score = tf.keras.layers.Conv2D(nb_classes, (1, 1), padding='same', activation='linear', name='seg/conv7_score')(drop7)
     
-    final_score = tf.keras.layers.Conv2DTranspose(
+    logits = tf.keras.layers.Conv2DTranspose(
         filters=nb_classes, 
         kernel_size=(64, 64),
         strides=(32, 32),
         padding='same',
-        activation=None,
+        activation='linear',
         name='seg/final_score',
         kernel_initializer=tf.keras.initializers.Constant(bilinear_upsample_weights(32, nb_classes)))(conv7_score)
-    
-    return final_score, pool5, conv7_score
+   
+    #softmax = tf.keras.activations.softmax(logits)
 
+    return logits, pool5, conv7_score
+'''
 def fcn_16(sess, inputs, nb_classes):    
     vgg16_pretrained = nets.VGG16(inputs, is_training=True, stem=True)
     sess.run(vgg16_pretrained.pretrained())
@@ -102,3 +103,6 @@ def fcn_8(sess, inputs, nb_classes):
     # Upsample sum
     final_score = upsample_helper(sum_score, nb_classes, 8, name='final_score')
     return final_score
+'''
+
+

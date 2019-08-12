@@ -28,14 +28,19 @@ def bilinear_upsample_weights(factor, number_of_classes):
         weights[:, :, i, i] = upsample_kernel
     return weights
 
-def fcn_32(inputs, nb_classes):    
+def fcn_32(inputs, nb_classes):
     vgg16_pretrained = tf.keras.applications.VGG16(include_top=False, input_tensor=inputs, weights='imagenet')
     pool5 = vgg16_pretrained.output
 
     # Replace fc layers with conv layers
-    #conv6 = conv2d_helper(pool5, 4096, (7,7), name='conv6')
-    #conv7 = conv2d_helper(conv6, 4096, (1,1), name='conv7')
-    conv7_score = tf.keras.layers.Conv2D(nb_classes, (1, 1), padding='same', activation='linear', name='seg/conv7_score')(pool5)
+    conv6 = tf.keras.layers.Conv2D(4096, (7, 7), padding='same', activation='relu', name='seg/conv6')(pool5)
+    drop6 = tf.keras.layers.Dropout(rate=0.5)(conv6)
+    
+    conv7 = tf.keras.layers.Conv2D(4096, (1, 1), padding='same', activation='relu', name='seg/conv7')(drop6)
+    drop7 = tf.keras.layers.Dropout(rate=0.5)(conv7)
+    
+    conv7_score = tf.keras.layers.Conv2D(nb_classes, (1, 1), padding='same', activation='linear', name='seg/conv7_score')(drop7)
+    
     final_score = tf.keras.layers.Conv2DTranspose(
         filters=nb_classes, 
         kernel_size=(64, 64),
@@ -45,10 +50,7 @@ def fcn_32(inputs, nb_classes):
         name='seg/final_score',
         kernel_initializer=tf.keras.initializers.Constant(bilinear_upsample_weights(32, nb_classes)))(conv7_score)
     
-    print(final_score)
-    input()
-    
-    return final_score
+    return final_score, pool5, conv7_score
 
 def fcn_16(sess, inputs, nb_classes):    
     vgg16_pretrained = nets.VGG16(inputs, is_training=True, stem=True)

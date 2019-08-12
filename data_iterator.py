@@ -33,7 +33,7 @@ class PascalDataset(object):
         img = img.resize(((w//32)*32, (h//32)*32))
         img = np.array(img, dtype=np.float32) / 255
         img = np.expand_dims(img, axis=0)
-        #img = preprocess_input(img)
+        img = preprocess_input(img)
         return img
 
     def load_label_image(self, path):

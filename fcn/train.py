@@ -6,9 +6,6 @@ import matplotlib.pyplot as plt
 import imageio
 from tensorflow.keras import backend as K
 
-sess = tf.Session()
-K.set_session(sess)
-
 nb_classes = 21
 epochs = 100
 save_model_path = 'test'
@@ -48,11 +45,18 @@ def save_y_pred(pred, path):
     imageio.imsave(path, pred)
     print(path)
 
+#pascal_dataset = data_iterator.PascalDataset(
+#    'C:\\Users\\Kazim\\workspace\\segmentation\\VOC2012\\JPEGImages\\',
+#    'C:\\Users\\Kazim\\workspace\\segmentation\\VOC2012\\SegmentationClass\\',
+#    'C:\\Users\\Kazim\\workspace\\segmentation\\VOC2012\\ImageSets\\Segmentation\\train.txt',
+#    'C:\\Users\\Kazim\\workspace\\segmentation\\VOC2012\\ImageSets\\Segmentation\\minitest.txt')
+
 pascal_dataset = data_iterator.PascalDataset(
-    'C:\\Users\\Kazim\\workspace\\segmentation\\VOC2012\\JPEGImages\\',
-    'C:\\Users\\Kazim\\workspace\\segmentation\\VOC2012\\SegmentationClass\\',
-    'C:\\Users\\Kazim\\workspace\\segmentation\\VOC2012\\ImageSets\\Segmentation\\train.txt',
-    'C:\\Users\\Kazim\\workspace\\segmentation\\VOC2012\\ImageSets\\Segmentation\\minitest.txt')
+    '/Users/kazimpal/workspace/segmentation/VOC2012/JPEGImages',
+    '/Users/kazimpal/workspace/segmentation/VOC2012/SegmentationClass',
+    '/Users/kazimpal/workspace/segmentation/VOC2012/ImageSets/Segmentation/train.txt',
+    '/Users/kazimpal/workspace/segmentation/VOC2012/ImageSets/Segmentation/minitest.txt')
+
 '''
 for k in range(5):
     X, y = next(pascal_dataset.train_gen)
@@ -68,20 +72,25 @@ for k in range(5):
 '''
 X = tf.placeholder(tf.float32, [None, None, None, 3])
 y = tf.placeholder(tf.float32, [None, None, None, nb_classes])
-y_pred = models.fcn_32(X, nb_classes)
+y_pred, vgg_out, conv7_score = models.fcn_32(X, nb_classes)
 
 y_flat = tf.keras.layers.Reshape((-1, nb_classes))(y)
 y_pred_flat = tf.keras.layers.Reshape((-1, nb_classes))(y_pred)
-y_pred_flat = tf.keras.layers.Softmax()(y_pred_flat)
+epsilon = tf.constant(value=1e-4)
+y_pred_flat = tf.keras.layers.Softmax()(y_pred_flat) + epsilon
 
 loss = tf.keras.losses.categorical_crossentropy(y_flat, y_pred_flat)
+#cross_entropy = -tf.reduce_sum(y_flat * tf.log(y_pred_flat), reduction_indices=[1])
+loss = tf.reduce_mean(loss)
 
 train_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "seg")
-optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.001).minimize(loss, var_list=train_vars)
+print(train_vars)
+optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.01).minimize(loss, var_list=train_vars)
 
-with sess.as_default():
+with K.get_session() as sess:
     print('running global_variables_initializer')
-    sess.run(tf.global_variables_initializer())
+    #sess.run(tf.global_variables_initializer())
+    sess.run(tf.variables_initializer (train_vars))
 
     print('starting training ... ')
     for epoch in range(1, epochs + 1):
@@ -89,7 +98,12 @@ with sess.as_default():
         for i in range(1, pascal_dataset.nb_images_train + 1):
             Xi, yi = next(pascal_dataset.train_gen)
             _, l, yf, ypf = sess.run([optimizer, loss, y_flat, y_pred_flat], feed_dict={X:Xi, y:yi})
-            print(yf.shape, ypf.shape)
+            #for c in range(10):
+            #    print(c7s[0,:,:,c])
+            #    input()
+            print(l.shape)
+            
+            '''print(yf.shape, ypf.shape)
             print(np.amin(yf), np.amax(yf))
             print(np.amin(ypf), np.amax(ypf))
             print(l.shape, np.amin(l), np.amax(l))
@@ -104,8 +118,9 @@ with sess.as_default():
                 print(bar)
                 input()
                 count += 1
-                if count > 5:
-                    break
+                if count > 3:
+                    break'''
+            
             l = np.mean(l)
             print('Epoch {}, Batch {} of {}, Loss {:.3f}'.format(epoch, i, pascal_dataset.nb_images_train, l))
         

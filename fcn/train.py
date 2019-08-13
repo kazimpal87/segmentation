@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 from segmentation import data_iterator
 from segmentation.fcn import models
+from segmentation.fcn import unet
 import imageio
 from tensorflow.keras import backend as K
 import matplotlib.pyplot as plt

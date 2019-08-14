@@ -7,7 +7,6 @@ import imageio
 from tensorflow.keras import backend as K
 import matplotlib.pyplot as plt
 
-nb_classes = 21
 epochs = 100
 save_model_path = 'test'
 
@@ -32,35 +31,32 @@ def color_map(N=256):
 cmap = color_map(21)
 
 def save_y_pred(pred, path):
-    print(pred.shape)
-    print(pred.dtype, np.amin(pred), np.amax(pred))
-    
-    pred = np.argmax(pred, axis=-1)
-    print(pred.shape)
-    print(pred.dtype, np.amin(pred), np.amax(pred))
-    
+    pred = np.argmax(pred, axis=-1)   
     pred = np.squeeze(cmap[pred])
-    print(pred.shape)
-    print(pred.dtype, np.amin(pred), np.amax(pred))
-    
     imageio.imsave(path, pred)
-    print(path)
-
-pascal_dataset = data_iterator.PascalDataset(
-    'C:\\Users\\Kazim\\workspace\\segmentation\\VOC2012\\JPEGImages\\',
-    'C:\\Users\\Kazim\\workspace\\segmentation\\VOC2012\\SegmentationClass\\',
-    'C:\\Users\\Kazim\\workspace\\segmentation\\VOC2012\\ImageSets\\Segmentation\\train.txt',
-    'C:\\Users\\Kazim\\workspace\\segmentation\\VOC2012\\ImageSets\\Segmentation\\minitest.txt')
 
 #pascal_dataset = data_iterator.PascalDataset(
-#    '/Users/kazimpal/workspace/segmentation/VOC2012/JPEGImages',
-#    '/Users/kazimpal/workspace/segmentation/VOC2012/SegmentationClass',
-#    '/Users/kazimpal/workspace/segmentation/VOC2012/ImageSets/Segmentation/train.txt',
-#    '/Users/kazimpal/workspace/segmentation/VOC2012/ImageSets/Segmentation/minitest.txt')
+#    'C:\\Users\\Kazim\\workspace\\segmentation\\VOC2012\\JPEGImages\\',
+#'C:\\Users\\Kazim\\workspace\\segmentation\\VOC2012\\ImageSets\\Segmentation\\train.txt',
+#    'C:\\Users\\Kazim\\workspace\\segmentation\\VOC2012\\SegmentationClass\\',
+#    'C:\\Users\\Kazim\\workspace\\segmentation\\VOC2012\\ImageSets\\Segmentation\\minitest.txt')
 
-X = tf.placeholder(tf.float32, [None, None, None, 3])
-y = tf.placeholder(tf.float32, [None, None, None, nb_classes])
-y_pred = models.fcn_8(X, nb_classes)
+imsize = (256, 256, 3)
+nb_classes = 21
+
+pascal_dataset = data_iterator.PascalDataset(
+    '/Users/kazimpal/workspace/segmentation/VOC2012/JPEGImages',
+    '/Users/kazimpal/workspace/segmentation/VOC2012/SegmentationClass',
+    '/Users/kazimpal/workspace/segmentation/VOC2012/ImageSets/Segmentation/train.txt',
+    '/Users/kazimpal/workspace/segmentation/VOC2012/ImageSets/Segmentation/minitest.txt',
+    imsize=imsize)
+
+X = tf.placeholder(tf.float32, [None, imsize[0], imsize[1], imsize[2]])
+y = tf.placeholder(tf.float32, [None, imsize[0], imsize[1], nb_classes])
+#y_pred = models.fcn_8(X, nb_classes)
+y_pred = unet.unet(X, nb_classes)
+print(y_pred)
+input()
 
 loss = tf.losses.softmax_cross_entropy(onehot_labels=y, logits=y_pred)
 optimizer = tf.train.AdamOptimizer(learning_rate=0.0001)

@@ -8,11 +8,11 @@ def conv_3x3_relu(inputs, filters, name):
 def conv_block(inputs, filters_list, name):
     x = inputs
     for k, filters in enumerate(filters_list):
-        x = conv_3x3_relu(x, filters, '{}/conv{}'.format(name, k))
+        x = conv_3x3_relu(x, filters, 'seg/{}/conv{}'.format(name, k))
     return x
 
 def downsample(inputs, name):
-    x = tf.keras.layers.MaxPool2D(pool_size=(2, 2), name=name)(inputs)
+    x = tf.keras.layers.MaxPool2D(pool_size=(2, 2), name='seg/'+name)(inputs)
     return x
 
 def bilinear_upsample_weights(factor, number_of_classes):
@@ -37,16 +37,16 @@ def upsample(inputs, filters, name):
         strides=(2, 2),
         padding='valid',
         activation='relu',
-        name=name)(inputs)
+        name='seg/'+name)(inputs)
         #kernel_initializer=tf.keras.initializers.Constant(bilinear_upsample_weights(2, filters)))(inputs)
     return x
 
-def copy_and_crop(left, right):
+def copy_and_crop(left, right, name):
     left_dims = left.shape.as_list()[1:3]
     right_dims = right.shape.as_list()[1:3]
     cropping = ( (left_dims[0] - right_dims[0]) // 2,  (left_dims[1] - right_dims[1]) // 2)
     left_cropped = tf.keras.layers.Cropping2D(cropping=cropping)(left)
-    output = tf.keras.layers.Concatenate()([left_cropped, right])
+    output = tf.keras.layers.Concatenate(name='seg/'+name)([left_cropped, right])
     return output
 
 def unet(inputs, nb_classes):
@@ -66,19 +66,19 @@ def unet(inputs, nb_classes):
     down_block_5 = conv_block(pool4, [1024, 1024], 'bottom_block')
 
     unpool1 = upsample(down_block_5, 512, 'unpool1')
-    merge1 = copy_and_crop(down_block_4, unpool1)
+    merge1 = copy_and_crop(down_block_4, unpool1, 'copy1')
     up_block_1 = conv_block(merge1, [512, 512], 'up_block_1')
 
     unpool2 = upsample(up_block_1, 256, 'unpool2')
-    merge2 = copy_and_crop(down_block_3, unpool2)
+    merge2 = copy_and_crop(down_block_3, unpool2, 'copy2')
     up_block_2 = conv_block(merge2, [256, 256], 'up_block_2')
 
     unpool3 = upsample(up_block_2, 128, 'unpool3')
-    merge3 = copy_and_crop(down_block_2, unpool3)
+    merge3 = copy_and_crop(down_block_2, unpool3, 'copy3')
     up_block_3 = conv_block(merge3, [128, 128], 'up_block_3')
 
     unpool4 = upsample(up_block_3, 64, 'unpool4')
-    merge4 = copy_and_crop(down_block_1, unpool4)
+    merge4 = copy_and_crop(down_block_1, unpool4, 'copy4')
     up_block_4 = conv_block(merge4, [64, 64], 'up_block_4')
 
     output = tf.keras.layers.Conv2D(nb_classes, (1, 1), activation='linear', name='output')(up_block_4)
@@ -109,5 +109,5 @@ def unet(inputs, nb_classes):
     print(output)
     input()
 
-    return unpool1
+    return output
 

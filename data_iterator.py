@@ -8,29 +8,23 @@ from random import shuffle
 
 class PascalDataset(object):
 
-    def __init__(self, image_dir, seg_dir, file_list_train, file_list_val, size_mult=32, nb_classes=21):
+    def __init__(self, image_dir, seg_dir, file_list_train, file_list_val, size_mult=32, nb_classes=21, imsize=None):
         self.image_dir = image_dir
         self.seg_dir = seg_dir
         self.file_list_train = file_list_train
         self.file_list_val = file_list_val
         self.size_mult = size_mult
         self.nb_classes = nb_classes
-
+        self.imsize = imsize
         self.make_dataset_and_iterator()
-
-    def resize_image_to_multiple(self, image):
-        image_shape = tf.shape(image)
-        h = image_shape[0]
-        w = image_shape[1]
-        h = (h // self.size_mult) * self.size_mult
-        w = (w // self.size_mult) * self.size_mult
-        image = tf.image.resize_images(image, [h, w], method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
-        return image
 
     def load_input_image(self, path):
         img = Image.open(path)
-        w, h = img.size
-        img = img.resize(((w//32)*32, (h//32)*32))
+        if self.imsize is None:
+            w, h = img.size
+            img = img.resize(((w//32)*32, (h//32)*32))
+        else:
+            img = img.resize((self.imsize[0], self.imsize[0]))
         img = np.array(img, dtype=np.float32)
         img = np.expand_dims(img, axis=0)
         img = preprocess_input(img)
@@ -38,8 +32,11 @@ class PascalDataset(object):
 
     def load_label_image(self, path):
         img = Image.open(path)
-        w, h = img.size
-        img = img.resize(((w//32)*32, (h//32)*32))
+        if self.imsize is None:
+            w, h = img.size
+            img = img.resize(((w//32)*32, (h//32)*32))
+        else:
+            img = img.resize((self.imsize[0], self.imsize[0]))
         img = np.array(img, dtype=np.uint8)
         img[img==255] = 0
         y = np.zeros((1, img.shape[0], img.shape[1], self.nb_classes), dtype=np.float32)
